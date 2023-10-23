@@ -2,4 +2,4 @@
 
 ./compile.sh &&
 
-./run.sh alarm.bif records.dat
+time ./run.sh alarm.bif records.dat

@@ -8,4 +8,4 @@ fi
 bayesnet_file="$1"
 data_file="$2"
 
-./main.out "$1" "$2"
+./main.out "$bayesnet_file" "$data_file"
