@@ -9,15 +9,11 @@ private:
     string name;
     vector<int> children;
     vector<string> parents;
-    int nvalues;
-    vector<string> values;
     vector<double> cpt, original_cpt;
 
 public:
-    graph_node(string name, int n, vector<string> vals) {
+    graph_node(string name) {
         this->name = name;
-        nvalues = n;
-        values = vals;
     }
     string get_name() {
         return name;
@@ -34,12 +30,6 @@ public:
     vector<double> get_original_cpt() {
         return original_cpt;
     }
-    int get_nvalues() {
-        return nvalues;
-    }
-    vector<string> get_values() {
-        return values;
-    }
     void set_cpt(vector<double> new_cpt) {
         cpt.clear();
         cpt = new_cpt;
@@ -54,7 +44,7 @@ public:
         parents.clear();
         parents = parent_nodes;
     }
-    bool add_child(int new_child_index ) {
+    bool add_child(int new_child_index) {
         for (int i = 0; i < children.size(); i++) {
             if (children[i] == new_child_index) {
                 return false;

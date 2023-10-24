@@ -1,3 +1,4 @@
+#include <iomanip>
 #include <iostream>
 #include <sstream>
 #include <fstream>
@@ -14,13 +15,16 @@ const string MISSING_DATA = "\"?\"";
 
 class network {
 
-    list<graph_node> pres_graph;
-
-public:
+private:
 
     vector<unordered_map<string, int>> possible_values;
     vector<pair<int, int>> missing_data_lines;
-    vector<vector<int>> raw_data, curr_data;
+    vector<vector<int>> current_data;
+    unordered_map<string, int> variable_name_index;
+
+public:
+
+    list<graph_node> pres_graph;
 
     int add_node(graph_node node) {
         pres_graph.push_back(node);
@@ -32,15 +36,7 @@ public:
     }
 
     int get_index(string val_name) {
-        list<graph_node>::iterator list_it;
-        int count = 0;
-        for (list_it = pres_graph.begin(); list_it != pres_graph.end(); list_it++) {
-            if (list_it->get_name().compare(val_name) == 0) {
-                return count;
-            }
-            count++;
-        }
-        return -1;
+        return variable_name_index[val_name];
     }
 
     list<graph_node>::iterator get_nth_node(int n) {
@@ -96,7 +92,8 @@ public:
                     node_values[values[i]] = i;
                 }
                 possible_values.push_back(node_values);
-                graph_node new_node(name, values.size(), values);
+                graph_node new_node(name);
+                variable_name_index[name] = net_size();
                 int pos = add_node(new_node);
             }
             else if (temp.compare("probability") == 0) {
@@ -151,35 +148,35 @@ public:
                 }
             }
             line_number++;
-            raw_data.push_back(enumerated_values);
+            current_data.push_back(enumerated_values);
         }
-        curr_data = raw_data;
         fin.close();
     }
 
-    void update_cpt() {
+    void learn_and_update_cpt() {
         int i = 0;
         for (list<graph_node>::iterator list_it = pres_graph.begin(); list_it != pres_graph.end(); list_it++, i++) {
             vector<double> original_cpt = list_it->get_original_cpt();
-            bool found_minus_one = false;
+            bool has_unknown_probability = false;
             for (int x : original_cpt) {
                 if (x == -1) {
-                    found_minus_one = true;
+                    has_unknown_probability = true;
                     break;
                 }
             }
-            if (!found_minus_one) {
+            if (!has_unknown_probability) {
                 continue;
             }
             vector<int> cpt_indices;
             int max_size = possible_values[i].size();
-            for (string parent : list_it->get_parents()) {
+            vector<string> parent_names = list_it->get_parents();
+            for (string parent : parent_names) {
                 int parent_index = get_index(parent);
                 cpt_indices.push_back(parent_index);
                 max_size *= possible_values[parent_index].size();
             }
             vector<int> cpt_occurences(max_size, 0), evidence_occurences(max_size / possible_values[i].size(), 0);
-            for (vector<int> &data_sample : curr_data) {
+            for (vector<int> &data_sample : current_data) {
                 int cpt_index = data_sample[i];
                 for (int var_index : cpt_indices) {
                     cpt_index = (cpt_index * possible_values[var_index].size()) + data_sample[var_index];
@@ -187,14 +184,6 @@ public:
                 cpt_occurences[cpt_index]++;
                 evidence_occurences[cpt_index % evidence_occurences.size()]++;
             }
-            bool has_zero_occurence = false;
-            for (int i = 0; i < evidence_occurences.size(); i++) {
-                if (evidence_occurences[i] == 0) {
-                    has_zero_occurence = true;
-                    break;
-                }
-            }
-            // update cpt
             vector<double> probabilities(max_size);
             double numerator, denominator;
             for (int j = 0; j < probabilities.size(); j++) {
@@ -202,8 +191,8 @@ public:
                     probabilities[j] = original_cpt[j];
                     continue;
                 }
-                numerator = cpt_occurences[j] + has_zero_occurence;
-                denominator = evidence_occurences[j % evidence_occurences.size()] + (possible_values[i].size() * has_zero_occurence);
+                numerator = cpt_occurences[j] + 1;
+                denominator = evidence_occurences[j % evidence_occurences.size()] + possible_values[i].size();
                 probabilities[j] = numerator / denominator;
             }
             list_it->set_cpt(probabilities);
@@ -214,7 +203,7 @@ public:
         for (auto [line_number, var_index] : missing_data_lines) {
             srand(time(0));
             int upper_cap_value = possible_values[var_index].size();
-            curr_data[line_number][var_index] = rand() % upper_cap_value;
+            current_data[line_number][var_index] = rand() % upper_cap_value;
         }
     }
 
@@ -230,28 +219,38 @@ public:
             }
             int cpt_index = 0;
             for (int parent_index : cpt_indices) {
-                cpt_index = (cpt_index * possible_values[parent_index].size()) + curr_data[line_number][parent_index];
+                cpt_index = (cpt_index * possible_values[parent_index].size()) + current_data[line_number][parent_index];
             }
-            double max_probability = 0;
-            int max_item = 0;
+            vector<double> query_probabilites;
+            double total_probability = 0.0;
             for (int i = cpt_index; i < cpt.size(); i += evidence_size) {
-                if (cpt[i] > max_probability) {
-                    max_probability = cpt[i];
-                    max_item = i / evidence_size;
+                query_probabilites.push_back(cpt[i]);
+                total_probability += cpt[i];
+            }
+            srand(time(0));
+            double random_value = (rand() / ((double)RAND_MAX + 1.0)) * total_probability;
+            double cumulative_value = 0.0;
+            int random_item = 0;
+            for (int i = 0; i < query_probabilites.size(); i++) {
+                cumulative_value += query_probabilites[i];
+                if (cumulative_value > random_value) {
+                    random_item = i;
+                    break;
                 }
             }
-            curr_data[line_number][var_index] = max_item;
+            current_data[line_number][var_index] = random_item;
         }
     }
 
     void write_to_file(string output_filename) {
-        ofstream fout("solved_alarm.bif");
+        ofstream fout(output_filename);
         fout.close();
     }
 
     void print_cpt() {
         for (list<graph_node>::iterator list_it = pres_graph.begin(); list_it != pres_graph.end(); list_it++) {
             vector<double> cpt = list_it->get_cpt();
+            cout << fixed << setprecision(4);
             for (int i = 0; i < cpt.size(); i++) {
                 cout << cpt[i] << " \n"[i == cpt.size() - 1];
             }
