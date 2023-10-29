@@ -161,9 +161,9 @@ public:
     }
 
     bool learn_and_update_cpt() {
-        bool is_changed = false;
-        for (int i = 0; i < pres_graph.size(); i++) {
-            vector<float> original_cpt = pres_graph[i]->get_original_cpt();
+        bool has_not_converged = false;
+        for (int node_index = 0; node_index < pres_graph.size(); node_index++) {
+            vector<float> original_cpt = pres_graph[node_index]->get_original_cpt();
             bool has_unknown_probability = false;
             for (int x : original_cpt) {
                 if (x == -1) {
@@ -175,16 +175,16 @@ public:
                 continue;
             }
             vector<int> parent_indices;
-            int max_size = possible_values[i].size();
-            vector<string> parent_names = pres_graph[i]->get_parents();
+            int max_size = possible_values[node_index].size();
+            vector<string> parent_names = pres_graph[node_index]->get_parents();
             for (string parent : parent_names) {
                 int parent_index = get_index(parent);
                 parent_indices.push_back(parent_index);
                 max_size *= possible_values[parent_index].size();
             }
-            vector<int> cpt_occurences(max_size, 0), evidence_occurences(max_size / possible_values[i].size(), 0);
+            vector<int> cpt_occurences(max_size, 0), evidence_occurences(max_size / possible_values[node_index].size(), 0);
             for (vector<int> &data_sample : current_data) {
-                int cpt_index = data_sample[i];
+                int cpt_index = data_sample[node_index];
                 for (int parent_index : parent_indices) {
                     cpt_index = (cpt_index * possible_values[parent_index].size()) + data_sample[parent_index];
                 }
@@ -192,21 +192,21 @@ public:
                 evidence_occurences[cpt_index % evidence_occurences.size()]++;
             }
             vector<float> new_cpt(max_size);
-            vector<float> old_cpt = pres_graph[i]->get_cpt();
+            vector<float> old_cpt = pres_graph[node_index]->get_cpt();
             float numerator, denominator;
-            for (int j = 0; j < new_cpt.size(); j++) {
-                if (original_cpt[j] != -1) {
-                    new_cpt[j] = original_cpt[j];
+            for (int i = 0; i < new_cpt.size(); i++) {
+                if (original_cpt[i] != -1) {
+                    new_cpt[i] = original_cpt[i];
                     continue;
                 }
-                numerator = (float)cpt_occurences[j] + LIDSTONE_CONSTANT;
-                denominator = (float)evidence_occurences[j % evidence_occurences.size()] + LIDSTONE_CONSTANT * (float)possible_values[i].size();
-                new_cpt[j] = max(numerator / denominator, MINIMUM_PROBABILITY);
-                is_changed = is_changed || (abs(new_cpt[j] - old_cpt[j]) >= CHANGE_THRESHOLD);
+                numerator = (float)cpt_occurences[i] + LIDSTONE_CONSTANT;
+                denominator = (float)evidence_occurences[i % evidence_occurences.size()] + LIDSTONE_CONSTANT * (float)possible_values[node_index].size();
+                new_cpt[i] = max(numerator / denominator, MINIMUM_PROBABILITY);
+                has_not_converged = has_not_converged || (abs(new_cpt[i] - old_cpt[i]) >= CHANGE_THRESHOLD);
             }
-            pres_graph[i]->set_cpt(new_cpt);
+            pres_graph[node_index]->set_cpt(new_cpt);
         }
-        return is_changed;
+        return !has_not_converged;
     }
 
     void randomise_missing_data() {
@@ -242,17 +242,17 @@ public:
 
     void write_cpt_to_file(string output_filename) {
         ofstream fout(output_filename, ios::app);
-        for (int i = 0; i < pres_graph.size(); i++) {
-            vector<string> parent_names = pres_graph[i]->get_parents();
-            vector<float> cpt = pres_graph[i]->get_cpt();
-            fout << "probability (  " << pres_graph[i]->get_name();
+        for (int node_index = 0; node_index < pres_graph.size(); node_index++) {
+            vector<string> parent_names = pres_graph[node_index]->get_parents();
+            vector<float> cpt = pres_graph[node_index]->get_cpt();
+            fout << "probability (  " << pres_graph[node_index]->get_name();
             for (string &parent_name : parent_names) {
                 fout << "  " << parent_name;
             }
             fout << " ) { //" << parent_names.size() + 1 << " variable(s) and ";
             fout << cpt.size() << " values\n" << "\ttable " << fixed << setprecision(4);
-            for (int j = 0; j < cpt.size(); j++) {
-                fout << cpt[j] << ' ';
+            for (int i = 0; i < cpt.size(); i++) {
+                fout << cpt[i] << ' ';
             }
             fout << ";\n}\n";
         }
