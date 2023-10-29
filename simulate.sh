@@ -2,4 +2,6 @@
 
 ./compile.sh &&
 
-time ./run.sh alarm.bif records.dat
+./run.sh alarm.bif records.dat &&
+
+./checker.sh

@@ -9,7 +9,7 @@ private:
     string name;
     vector<int> children;
     vector<string> parents;
-    vector<double> cpt, original_cpt;
+    vector<float> cpt, original_cpt;
 
 public:
     graph_node(string name) {
@@ -24,17 +24,17 @@ public:
     vector<string> get_parents() {
         return parents;
     }
-    vector<double> get_cpt() {
+    vector<float> get_cpt() {
         return cpt;
     }
-    vector<double> get_original_cpt() {
+    vector<float> get_original_cpt() {
         return original_cpt;
     }
-    void set_cpt(vector<double> new_cpt) {
+    void set_cpt(vector<float> new_cpt) {
         cpt.clear();
         cpt = new_cpt;
     }
-    void set_original_cpt(vector<double> new_cpt) {
+    void set_original_cpt(vector<float> new_cpt) {
         original_cpt.clear();
         cpt.clear();
         original_cpt = new_cpt;
