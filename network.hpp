@@ -1,3 +1,4 @@
+#include <cmath>
 #include <iomanip>
 #include <array>
 #include <iostream>
@@ -13,7 +14,7 @@
 using namespace std;
 
 const string MISSING_DATA = "\"?\"";
-const float LIDSTONE_CONSTANT = 0.1;
+const float MAXIMUM_SMOOTHING_FACTOR = 0.10;
 const float MINIMUM_PROBABILITY = 0.0001;
 const float CHANGE_THRESHOLD = 0.0001;
 
@@ -162,6 +163,7 @@ public:
 
     bool learn_and_update_cpt() {
         bool has_not_converged = false;
+        float smoothing_factor = fminf(1 / (float)pres_graph.size(), MAXIMUM_SMOOTHING_FACTOR);
         for (int node_index = 0; node_index < pres_graph.size(); node_index++) {
             vector<float> original_cpt = pres_graph[node_index]->get_original_cpt();
             bool has_unknown_probability = false;
@@ -175,14 +177,14 @@ public:
                 continue;
             }
             vector<int> parent_indices;
-            int max_size = possible_values[node_index].size();
+            vector<float> old_cpt = pres_graph[node_index]->get_cpt();
+            int node_values = possible_values[node_index].size();
+            int max_size = old_cpt.size();
             vector<string> parent_names = pres_graph[node_index]->get_parents();
             for (string parent : parent_names) {
-                int parent_index = get_index(parent);
-                parent_indices.push_back(parent_index);
-                max_size *= possible_values[parent_index].size();
+                parent_indices.push_back(get_index(parent));
             }
-            vector<int> cpt_occurences(max_size, 0), evidence_occurences(max_size / possible_values[node_index].size(), 0);
+            vector<int> cpt_occurences(max_size, 0), evidence_occurences(max_size / node_values, 0);
             for (vector<int> &data_sample : current_data) {
                 int cpt_index = data_sample[node_index];
                 for (int parent_index : parent_indices) {
@@ -191,16 +193,57 @@ public:
                 cpt_occurences[cpt_index]++;
                 evidence_occurences[cpt_index % evidence_occurences.size()]++;
             }
+            vector<int> factors(parent_indices.size());
+            for (int k = 0; k < factors.size(); k++) {
+                if (k == 0) {
+                    factors[k] = evidence_occurences.size() / possible_values[parent_indices[k]].size();
+                } else {
+                    factors[k] = factors[k-1] / possible_values[parent_indices[k]].size();
+                }
+            }
             vector<float> new_cpt(max_size);
-            vector<float> old_cpt = pres_graph[node_index]->get_cpt();
             float numerator, denominator;
+            for (int i = 0; i < evidence_occurences.size(); i++) {
+                if (evidence_occurences[i] > 0) {
+                    continue;
+                }
+                int j = i;
+                vector<int> var_assigned(factors.size()), node_numerators(node_values, 0);
+                denominator = smoothing_factor * node_values;
+                for (int k = 0; k < factors.size(); k++) {
+                    var_assigned[k] = j / factors[k];
+                    j -= var_assigned[k] * factors[k];
+                }
+                for (int k = 0; k < factors.size(); k++) {
+                    for (int r = 0; r < possible_values[parent_indices[k]].size(); r++) {
+                        if (r != var_assigned[k]) {
+                            j = i + ((r - var_assigned[k]) * factors[k]);
+                            if (evidence_occurences[j] == 0) {
+                                continue;
+                            }
+                            for (int m = 0; m < node_values; m++) {
+                                node_numerators[m] += cpt_occurences[m * evidence_occurences.size() + j];
+                                denominator += (float)cpt_occurences[m * evidence_occurences.size() + j];
+                            }
+                        }
+                    }
+                }
+                for (int k = 0; k < node_values; k++) {
+                    j = i + k * evidence_occurences.size();
+                    numerator = (float)node_numerators[k] + smoothing_factor;
+                    new_cpt[j] = max(numerator / denominator, MINIMUM_PROBABILITY);
+                    has_not_converged = has_not_converged || (fabs(new_cpt[j] - old_cpt[j]) >= CHANGE_THRESHOLD);
+                }
+            }
             for (int i = 0; i < new_cpt.size(); i++) {
                 if (original_cpt[i] != -1) {
                     new_cpt[i] = original_cpt[i];
                     continue;
+                } else if (evidence_occurences[i % evidence_occurences.size()] == 0) {
+                    continue;
                 }
-                numerator = (float)cpt_occurences[i] + LIDSTONE_CONSTANT;
-                denominator = (float)evidence_occurences[i % evidence_occurences.size()] + LIDSTONE_CONSTANT * (float)possible_values[node_index].size();
+                numerator = (float)cpt_occurences[i] + smoothing_factor;
+                denominator = (float)evidence_occurences[i % evidence_occurences.size()] + smoothing_factor * (float)node_values;
                 new_cpt[i] = max(numerator / denominator, MINIMUM_PROBABILITY);
                 has_not_converged = has_not_converged || (abs(new_cpt[i] - old_cpt[i]) >= CHANGE_THRESHOLD);
             }
@@ -218,7 +261,6 @@ public:
     }
 
     void generate_missing_data() {
-        srand(time(0));
         for (auto [line_number, var_index, evidence_index] : missing_data_lines) {
             vector<float> cpt = pres_graph[var_index]->get_cpt();
             int evidence_size = cpt.size() / possible_values[var_index].size();
@@ -228,14 +270,28 @@ public:
                 query_probabilites.push_back(cpt[i]);
                 total_probability += cpt[i];
             }
-            float max_probability = 0;
             int random_item = 0;
+
+            // Hard inference
+            float max_probability = 0;
             for (int i = 0; i < query_probabilites.size(); i++) {
                 if (query_probabilites[i] > max_probability) {
                     max_probability = query_probabilites[i];
                     random_item = i;
                 }
             }
+
+            // Soft inference
+            // float random_val = (rand() / (float(RAND_MAX) + 1.0)) * total_probability;
+            // float cumulative_val = 0.0;
+            // for (int i = 0; i < query_probabilites.size(); i++) {
+            //     cumulative_val += query_probabilites[i];
+            //     if (cumulative_val >= random_val) {
+            //         random_item = i;
+            //         break;
+            //     }
+            // }
+
             current_data[line_number][var_index] = random_item;
         }
     }
@@ -266,12 +322,6 @@ public:
             for (int i = 0; i < cpt.size(); i++) {
                 cout << cpt[i] << " \n"[i == cpt.size() - 1];
             }
-        }
-    }
-
-    ~network() {
-        for (int i = pres_graph.size(); i >= 0; i--) {
-            delete pres_graph[i];
         }
     }
 

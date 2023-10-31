@@ -5,7 +5,7 @@ if [[ $# -ne 2 ]]; then
     exit 1
 fi
 
-bayesnet_file="$1"
-data_file="$2"
+bayesnet_filename="$1"
+data_filename="$2"
 
-./main.out "$bayesnet_file" "$data_file"
+./main.out "$bayesnet_filename" "$data_filename"

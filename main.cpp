@@ -7,8 +7,8 @@
 
 using namespace std;
 
-const int MAX_EM_ITERATIONS = 2000;
-int DURATION_MILLISECONDS = 10 * 1000;
+const int MAX_EM_ITERATIONS = 3000;
+int DURATION_MILLISECONDS = 115 * 1000;
 
 int main(int argc, char** argv) {
     auto start_time = chrono::high_resolution_clock::now();
@@ -16,11 +16,11 @@ int main(int argc, char** argv) {
         cerr << "Bayesnet file and data names required as arguments\n";
         exit(1);
     }
-    string bayes_net_filename = argv[1];
+    string bayesnet_filename = argv[1];
     string data_filename = argv[2];
     string output_filename = "solved_alarm.bif";
     network* alarm = new network();
-    alarm->read_network(bayes_net_filename, output_filename);
+    alarm->read_network(bayesnet_filename, output_filename);
     alarm->read_data(data_filename);
     alarm->randomise_missing_data();
     alarm->learn_and_update_cpt();
@@ -40,9 +40,8 @@ int main(int argc, char** argv) {
     }
     alarm->write_cpt_to_file(output_filename);
     // alarm->print_cpt_list();
-    delete alarm;
     current_time = chrono::high_resolution_clock::now();
     elapsed_milliseconds = chrono::duration_cast<chrono::milliseconds>(current_time - start_time).count();
-    cout << "EM Iterations : " << em_iterations << '\n';
-    cout << "Finished in " << elapsed_milliseconds << " milliseconds\n";
+    // cout << "EM Iterations: " << em_iterations << '\n';
+    // cout << "Finished in " << elapsed_milliseconds << " milliseconds\n";
 }
